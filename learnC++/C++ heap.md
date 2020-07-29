@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 }
 ```
 
-``
+```
 1 2 4 3 5 9
 2 3 4 9 5 1
 ```
