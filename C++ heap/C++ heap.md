@@ -6,9 +6,20 @@ C++可以使用优先队列 <priority_queue>，但是灵活性不如使用 <algo
 
 <algorithm> 中的heap相关的函数类似于 python 中的 heapq 。
 
-## 基本使用 
+下面的函数，头文件都位于 <algorithm> 中
 
-建堆 make_heap
+### 建堆 make_heap
+
+在范围 [first, last) 中构造最大堆。
+
+```
+template< class RandomIt >
+void make_heap( RandomIt first, RandomIt last );
+
+template< class RandomIt, class Compare >
+
+void make_heap( RandomIt first, RandomIt last, Compare comp );
+```
 
 ### 加入元素 push_heap
 
@@ -18,7 +29,26 @@ C++可以使用优先队列 <priority_queue>，但是灵活性不如使用 <algo
 
 交换在位置 first 的值和在位置 last-1 的值，并令子范围 [first, last-1) 变为堆。这拥有从范围 [first, last) 所定义的堆移除首个元素的效果。
 
-###  创建大根堆
+### sort_heap
+
+转换最大堆 [first, last) 为以升序排序的范围。产生的范围不再拥有堆属性。
+
+可能的实现
+
+```
+template< class RandomIt >
+void sort_heap( RandomIt first, RandomIt last )
+{
+    while (first != last)
+        std::pop_heap(first, last--);
+}
+```
+
+效果和 sort 一样。只不过只能用于堆。时间复杂度比起 sort 可能会低一些。
+
+### 示例
+
+####  创建大根堆
 
 直接使用 `make_heap` 创建出来的是大根堆
 
@@ -42,7 +72,7 @@ int main(int argc, char *argv[])
 9 5 4 1 2 3
 ```
 
-### 创建小根堆
+#### 创建小根堆
 
 ```
 #include <iostream>
@@ -77,3 +107,6 @@ int main(int argc, char *argv[])
 2 3 4 9 5 1
 ```
 
+
+# References
+1. [std::make_heap - cppreference.com](https://zh.cppreference.com/w/cpp/algorithm/make_heap)
