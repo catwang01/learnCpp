@@ -127,6 +127,10 @@ int main( int argc, char* argv[] )
                 }
                 continue;
             }
+            // 注意，POLLRDHUP 处理需要在 POLLIN 之前
+            // 因为当连接关闭时，POLLIN 和 POLLRDHUP 事件都会触发！
+            // TODO(ed)：那为什么要监听 POLLRDHUP 事件呢？直接在 POLLIN 事件中判断 ret == 0 不是更好吗？
+            // POLLRDHUP 也有跨平台问题
             else if( fds[i].revents & POLLRDHUP ) // 如果 i 位置的连接关闭
             {
                 // 下面的逻辑实际上就是在说如果 fds[i] 对应的 socket 连接断开了，就释放对应的资源
