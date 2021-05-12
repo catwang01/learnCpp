@@ -14,7 +14,7 @@
 #include <pthread.h>
 
 #define MAX_EVENT_NUMBER 1024
-static int pipefd[2]; // 一个管道
+static int pipefd[2]; // 管道
 
 int setnonblocking( int fd ) // 设置文件描述符为非阻塞
 {
@@ -91,11 +91,13 @@ int main( int argc, char* argv[] )
     assert( epollfd != -1 );
     addfd( epollfd, listenfd ); // 将监听sock对应的事件添加到内核事件表中
 
-    ret = socketpair( PF_UNIX, SOCK_STREAM, 0, pipefd ); // 创建双向管道
-                                                        // TODO(ed)：为什么这里要一个双向管道？貌似没有用到呀？
+    ret = socketpair( PF_UNIX, SOCK_STREAM, 0, pipefd );  // 创建双向管道
+                                                          // TODO(ed)：为什么这里要一个双向管道？貌似没有用到呀？
+    // 实验了一下，单向管道有问题，不能达到效果
+    // ret = pipe(pipefd);
     assert( ret != -1 );
-    setnonblocking( pipefd[1] );
-    addfd( epollfd, pipefd[0] );
+    setnonblocking( pipefd[1] ); // 读端设置为非阻塞
+    addfd( epollfd, pipefd[0] ); // 写端监听 EPOLLIN 事件
 
     // add all the interesting signals here
     addsig( SIGHUP ); 
@@ -103,12 +105,14 @@ int main( int argc, char* argv[] )
     addsig( SIGCHLD ); // Child stopped or terminated
     addsig( SIGTERM ); // Termination signal
     addsig( SIGINT ); // Interrupt from keyboard ctrl + c
-    bool stop_server = false;
+
+    bool stop_server = false; // 由于停止循环的逻辑在一个二重循环内层，不能直接 break，因此用指示变量
 
     while( !stop_server )
     {
         int number = epoll_wait( epollfd, events, MAX_EVENT_NUMBER, -1 ); // timeout == -1, epoll_wait run blockly
         if ( ( number < 0 ) && ( errno != EINTR ) ) // when errno == EINTE，epoll_wait was interrupted by a signal
+                                                    // TODO(ed):由于设置了 SA_RESTART，errno!= EINTR 这个判断是不是可以不用？
         {
             printf( "epoll failure\n" );
             break;
@@ -117,23 +121,22 @@ int main( int argc, char* argv[] )
         for ( int i = 0; i < number; i++ )
         {
             int sockfd = events[i].data.fd;
-            if( sockfd == listenfd ) // 如果是监听socket
+            if( sockfd == listenfd ) // 如果是监听socket，说明有连接
             {
                 struct sockaddr_in client_address;
                 socklen_t client_addrlength = sizeof( client_address );
                 int connfd = accept( listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
                 addfd( epollfd, connfd );
-            }
+            } // 这里为了简化代码，没有做错误处理
             else if( ( sockfd == pipefd[0] ) && ( events[i].events & EPOLLIN ) )
             {
-                int sig;
-                char signals[1024];
+                char signals[1024]; // 用来接受信号。最多接受 1024 个信号
                 ret = recv( pipefd[0], signals, sizeof( signals ), 0 );
-                if( ret == -1 )
+                if( ret == -1 ) // TODO(ed): 这里应该有两种情况。一种是非阻塞返回 ret==-1，一种是未知错误返回 -1，是不是应该分开讨论？
                 {
                     continue;
                 }
-                else if( ret == 0 )
+                else if( ret == 0 ) // TODO(ed):什么时候会出现？管道不可读？
                 {
                     continue;
                 }
@@ -158,8 +161,9 @@ int main( int argc, char* argv[] )
                     }
                 }
             }
-            else
+            else 
             {
+                // 这里处理客户端发送的消息
             }
         }
     }
@@ -168,5 +172,6 @@ int main( int argc, char* argv[] )
     close( listenfd );
     close( pipefd[1] );
     close( pipefd[0] );
+    // TODO(ed)：貌似没有关闭客户端连接socket？
     return 0;
 }
