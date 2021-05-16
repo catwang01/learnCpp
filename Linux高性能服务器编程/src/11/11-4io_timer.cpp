@@ -13,19 +13,22 @@ while( 1 )
         printf( "epoll failure\n" );
         break;
     }
-    if( number == 0 )
+    if( number == 0 ) // epoll_wait returns 0 means timeout
     {
         // timeout
-        timeout = TIMEOUT;
+        // here may toggle callback function
+        timeout = TIMEOUT; // reset timeout param after handling timed task 
         continue;
     }
 
-    end = time( NULL );
+    end = time( NULL ); // TODO(ed): why compute end time here(before handling connections)?
+                        // why not compute end time after handling connections
     timeout -= ( end - start ) * 1000;
-    if( timeout <= 0 )
+    if( timeout <= 0 ) // if timeout == 0, means  while the file descriptor is ready, the timeout period has also reached
     {
         // timeout
-        timeout = TIMEOUT;
+        // here may toggle callback function
+        timeout = TIMEOUT; // reset timeout param after handling timed task
     }
 
     // handle connections

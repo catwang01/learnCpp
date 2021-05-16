@@ -48,8 +48,12 @@ void addsig( int sig )
     memset( &sa, '\0', sizeof( sa ) );
     sa.sa_handler = sig_handler;
     sa.sa_flags |= SA_RESTART; // SA_RESTART 表示重新调用被该信号终止的系统调用
-                                // TODO(ed):不要这个 SA_RESTART 会怎么样呢？
-    sigfillset( &sa.sa_mask );  // TODO(ed):为什么将所有信号都 block了？
+                                // Q(ed): what if we omit this SA_RESTART? 
+                                // A: Some function like recv, send may be interrupted by the system signal 
+                                // and be not atomatically restarted
+    sigfillset( &sa.sa_mask );  // A(ed):为什么将所有信号都 block了？
+                                // Q: sa.sa_mask specifies which signals to block during the execution of the signal handler,
+                                // instead of during the whole lifetime of the program.
     assert( sigaction( sig, &sa, NULL ) != -1 );
 }
 
@@ -96,8 +100,8 @@ int main( int argc, char* argv[] )
     // 实验了一下，单向管道有问题，不能达到效果
     // ret = pipe(pipefd);
     assert( ret != -1 );
-    setnonblocking( pipefd[1] ); // 读端设置为非阻塞
-    addfd( epollfd, pipefd[0] ); // 写端监听 EPOLLIN 事件
+    setnonblocking( pipefd[1] ); // 写端设置为非阻塞
+    addfd( epollfd, pipefd[0] ); // 读端监听 EPOLLIN 事件
 
     // add all the interesting signals here
     addsig( SIGHUP ); 
@@ -110,9 +114,10 @@ int main( int argc, char* argv[] )
 
     while( !stop_server )
     {
-        int number = epoll_wait( epollfd, events, MAX_EVENT_NUMBER, -1 ); // timeout == -1, epoll_wait run blockly
-        if ( ( number < 0 ) && ( errno != EINTR ) ) // when errno == EINTE，epoll_wait was interrupted by a signal
-                                                    // TODO(ed):由于设置了 SA_RESTART，errno!= EINTR 这个判断是不是可以不用？
+        int number = epoll_wait( epollfd, events, MAX_EVENT_NUMBER, -1 );   // timeout == -1, epoll_wait will block indefinitely
+        if ( ( number < 0 ) && ( errno != EINTR ) )                         // when errno == EINTE，epoll_wait was interrupted by a signal
+                                                            // SOLVED(ed): 由于之前设置了 SA_RESTART，errno!= EINTR 这个判断是不是可以不用？
+                                                            // No. Not all functions are restartable. epoll_wait will always return -1 with errno regardless of the use of SA_RESTART
         {
             printf( "epoll failure\n" );
             break;

@@ -1,3 +1,5 @@
+// This program is to check the clients‘ connect regularly
+// the code is from page 200 from Linux高性能服务器编程
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -33,7 +35,7 @@ int setnonblocking( int fd )
 void addfd( int epollfd, int fd )
 {
     epoll_event event;
-    event.data.fd = fd;
+    event.data.fd = fd; 
     event.events = EPOLLIN | EPOLLET;
     epoll_ctl( epollfd, EPOLL_CTL_ADD, fd, &event );
     setnonblocking( fd );
@@ -41,10 +43,10 @@ void addfd( int epollfd, int fd )
 
 void sig_handler( int sig )
 {
-    int save_errno = errno;
+    int save_errno = errno; // save errno
     int msg = sig;
     send( pipefd[1], ( char* )&msg, 1, 0 );
-    errno = save_errno;
+    errno = save_errno;  // recover errno
 }
 
 void addsig( int sig )
@@ -53,7 +55,7 @@ void addsig( int sig )
     memset( &sa, '\0', sizeof( sa ) );
     sa.sa_handler = sig_handler;
     sa.sa_flags |= SA_RESTART;
-    sigfillset( &sa.sa_mask );
+    sigfillset( &sa.sa_mask ); // block all signals during the execution of the signal handler
     assert( sigaction( sig, &sa, NULL ) != -1 );
 }
 
@@ -63,11 +65,12 @@ void timer_handler()
     alarm( TIMESLOT );
 }
 
+// 回调函数，删除非活动连接上注册事件，并关闭连接
 void cb_func( client_data* user_data )
 {
-    epoll_ctl( epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0 );
+    epoll_ctl( epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0 ); // delete events in events table
     assert( user_data );
-    close( user_data->sockfd );
+    close( user_data->sockfd ); // close socket
     printf( "close fd %d\n", user_data->sockfd );
 }
 
@@ -90,6 +93,8 @@ int main( int argc, char* argv[] )
 
     int listenfd = socket( PF_INET, SOCK_STREAM, 0 );
     assert( listenfd >= 0 );
+    int reuse = 1;
+    setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 
     ret = bind( listenfd, ( struct sockaddr* )&address, sizeof( address ) );
     assert( ret != -1 );
@@ -114,12 +119,12 @@ int main( int argc, char* argv[] )
 
     client_data* users = new client_data[FD_LIMIT]; 
     bool timeout = false;
-    alarm( TIMESLOT );
+    alarm( TIMESLOT ); // set the alarm
 
     while( !stop_server )
     {
-        int number = epoll_wait( epollfd, events, MAX_EVENT_NUMBER, -1 );
-        if ( ( number < 0 ) && ( errno != EINTR ) )
+        int number = epoll_wait( epollfd, events, MAX_EVENT_NUMBER, -1 ); // timeout == -1, epoll_wait will block indefinitely
+        if ( ( number < 0 ) && ( errno != EINTR ) )             // epoll_wait is not restartable, so errno==EINTR is necessary
         {
             printf( "epoll failure\n" );
             break;
@@ -136,15 +141,17 @@ int main( int argc, char* argv[] )
                 addfd( epollfd, connfd );
                 users[connfd].address = client_address;
                 users[connfd].sockfd = connfd;
+
+                // 为每个客户端连接都设置 3 * TIMESLOT 之后检查一次
                 util_timer* timer = new util_timer;
                 timer->user_data = &users[connfd];
                 timer->cb_func = cb_func;
                 time_t cur = time( NULL );
-                timer->expire = cur + 3 * TIMESLOT;
+                timer->expire = cur + 3 * TIMESLOT; // 设置过期事件为 3 * TIMESLOT 后
                 users[connfd].timer = timer;
                 timer_lst.add_timer( timer );
             }
-            else if( ( sockfd == pipefd[0] ) && ( events[i].events & EPOLLIN ) )
+            else if( ( sockfd == pipefd[0] ) && ( events[i].events & EPOLLIN ) ) // catch signals
             {
                 int sig;
                 char signals[1024];
@@ -154,7 +161,8 @@ int main( int argc, char* argv[] )
                     // handle the error
                     continue;
                 }
-                else if( ret == 0 )
+                else if( ret == 0 ) // pipefd[0] is closed
+                                    // normally, this situation is rare.
                 {
                     continue;
                 }
@@ -164,7 +172,7 @@ int main( int argc, char* argv[] )
                     {
                         switch( signals[i] )
                         {
-                            case SIGALRM:
+                            case SIGALRM: // if recieve a SIGALRM, set timeout
                             {
                                 timeout = true;
                                 break;
@@ -185,7 +193,7 @@ int main( int argc, char* argv[] )
                 util_timer* timer = users[sockfd].timer;
                 if( ret < 0 )
                 {
-                    if( errno != EAGAIN )
+                    if( errno != EAGAIN ) // 读取失败，errno == EAGAIN 说明还没就绪，不算报错
                     {
                         cb_func( &users[sockfd] );
                         if( timer )
@@ -194,7 +202,7 @@ int main( int argc, char* argv[] )
                         }
                     }
                 }
-                else if( ret == 0 )
+                else if( ret == 0 ) // 连接断开
                 {
                     cb_func( &users[sockfd] );
                     if( timer )
@@ -202,10 +210,10 @@ int main( int argc, char* argv[] )
                         timer_lst.del_timer( timer );
                     }
                 }
-                else
+                else // 发送成功
                 {
-                    //send( sockfd, users[sockfd].buf, BUFFER_SIZE-1, 0 );
-                    if( timer )
+                    // send( sockfd, users[sockfd].buf, BUFFER_SIZE-1, 0 );
+                    if( timer ) // 调整过期时间
                     {
                         time_t cur = time( NULL );
                         timer->expire = cur + 3 * TIMESLOT;

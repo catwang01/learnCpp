@@ -67,7 +67,7 @@ int main( int argc, char* argv[] )
     address.sin_port = htons( port );
     int udpfd = socket( PF_INET, SOCK_DGRAM, 0 ); // udp socket
     assert( udpfd >= 0 );
-                                                  // 由于 udp 不知棉量连接的，因此 udp 不需要监听 socket
+                                                  // 由于 udp 是无连接的，因此 udp 不需要监听 socket
                                                   // 直接使用 udpfd 通信即可
 
     ret = bind( udpfd, ( struct sockaddr* )&address, sizeof( address ) );
@@ -125,6 +125,7 @@ int main( int argc, char* argv[] )
                         {
                             break;
                         } // 不在阻塞状态，说明有问题，关闭
+                        // TODO(ed): 这里为什么不将 connfd 对应的事件从内核事件表中删除？
                         close( sockfd );
                         break;
                     }
@@ -132,6 +133,7 @@ int main( int argc, char* argv[] )
                                         // 这里通过 recv 返回 0 来判断是否关闭连接
                     {
                         close( sockfd ); // 关闭
+                        // TODO(ed): 这里为什么不将 connfd 对应的事件从内核事件表中删除？
                     }
                     else
                     {
