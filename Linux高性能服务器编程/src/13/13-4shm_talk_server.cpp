@@ -222,14 +222,15 @@ int main( int argc, char* argv[] )
     bool stop_server = false;
     bool terminate = false;
 
-    shmfd = shm_open( shm_name, O_CREAT | O_RDWR, 0666 );
+    shmfd = shm_open( shm_name, O_CREAT | O_RDWR, 0666 ); // open shared memory
     assert( shmfd != -1 );
-    ret = ftruncate( shmfd, USER_LIMIT * BUFFER_SIZE ); 
+    ret = ftruncate( shmfd, USER_LIMIT * BUFFER_SIZE );  // initialize the shared memory. 
+                                                         // The newly created shared memory has a length of zero.
     assert( ret != -1 );
-
+    // mmaping the shared memory into kernel memory
     share_mem = (char*)mmap( NULL, USER_LIMIT * BUFFER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shmfd, 0 );
     assert( share_mem != MAP_FAILED );
-    close( shmfd );
+    close( shmfd ); // TODO(ed): Can we close the file descriptor after mapping?
 
     while( !stop_server )
     {
@@ -271,7 +272,7 @@ int main( int argc, char* argv[] )
                     close( connfd );
                     continue;
                 }
-                else if( pid == 0 )
+                else if( pid == 0 ) // Child process branch
                 {
                     close( epollfd );
                     close( listenfd );
@@ -282,7 +283,7 @@ int main( int argc, char* argv[] )
                     munmap( (void*)share_mem,  USER_LIMIT * BUFFER_SIZE );
                     exit( 0 );
                 }
-                else
+                else // Parent process branch
                 {
                     close( connfd );
                     close( users[user_count].pipefd[1] );
@@ -292,7 +293,8 @@ int main( int argc, char* argv[] )
                     user_count++;
                 }
             }
-            else if( ( sockfd == sig_pipefd[0] ) && ( events[i].events & EPOLLIN ) )
+            // Signal Handling
+            else if( ( sockfd == sig_pipefd[0] ) && ( events[i].events & EPOLLIN ) ) // siganls comes
             {
                 int sig;
                 char signals[1024];
@@ -307,11 +309,11 @@ int main( int argc, char* argv[] )
                 }
                 else
                 {
-                    for( int i = 0; i < ret; ++i )
+                    for( int i = 0; i < ret; ++i ) // process signals
                     {
                         switch( signals[i] )
                         {
-                            case SIGCHLD:
+                            case SIGCHLD: // children exit
                             {
 	                        pid_t pid;
 	                        int stat;
@@ -336,8 +338,8 @@ int main( int argc, char* argv[] )
                                 }
                                 break;
                             }
-                            case SIGTERM:
-                            case SIGINT:
+                            case SIGTERM: // kill
+                            case SIGINT: // ctrl + c
                             {
                                 printf( "kill all the clild now\n" );
                                 //addsig( SIGTERM, SIG_IGN );
@@ -350,7 +352,7 @@ int main( int argc, char* argv[] )
                                 for( int i = 0; i < user_count; ++i )
                                 {
                                     int pid = users[i].pid;
-                                    kill( pid, SIGTERM );
+                                    kill( pid, SIGTERM ); // send SIGTERM to child processes
                                 }
                                 terminate = true;
                                 break;
@@ -363,6 +365,7 @@ int main( int argc, char* argv[] )
                     }
                 }
             }
+            // Application logic
             else if( events[i].events & EPOLLIN )
             {
                 int child = 0;
