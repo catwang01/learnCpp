@@ -57,7 +57,7 @@ void addfd( int epollfd, int fd )
     setnonblocking( fd );
 }
 
-void sig_handler( int sig )
+void sig_handler( int sig ) // send sig identifier to write end(sig_pipefd[1]);
 {
     int save_errno = errno;
     int msg = sig;
@@ -89,7 +89,7 @@ void del_resource()
     delete [] sub_process;
 }
 
-void child_term_handler( int sig )
+void child_term_handler( int sig ) // handle SIGCHID
 {
     stop_child = true;
 }
